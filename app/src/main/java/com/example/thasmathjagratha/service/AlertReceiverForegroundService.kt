@@ -14,7 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.example.thasmathjagratha.MainActivity
 import com.example.thasmathjagratha.R
-import com.example.thasmathjagratha.transport.LocalAlertTransport
+import com.example.thasmathjagratha.transport.MultiTierAlertTransport
 import com.example.thasmathjagratha.transport.WireAlert
 import com.example.thasmathjagratha.tts.engine.TtsEngine
 import com.example.thasmathjagratha.tts.engine.TtsMode
@@ -64,7 +64,7 @@ class AlertReceiverForegroundService : Service() {
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var localTransport: LocalAlertTransport? = null
+    private var multiTierTransport: MultiTierAlertTransport? = null
     private var ttsEngine: TtsEngine? = null
     private var ttsPlayer: TtsAudioPlayer? = null
     private val ttsMutex = Mutex()
@@ -84,11 +84,11 @@ class AlertReceiverForegroundService : Service() {
 
         startInForeground()
 
-        if (localTransport == null) {
-            localTransport = LocalAlertTransport(applicationContext, ::onIncomingAlert).also {
+        if (multiTierTransport == null) {
+            multiTierTransport = MultiTierAlertTransport(applicationContext, ::onIncomingAlert).also {
                 it.startListening()
             }
-            Log.i(TAG, "AlertReceiverForegroundService active and listening for local broadcasts")
+            Log.i(TAG, "AlertReceiverForegroundService active with MultiTierAlertTransport (BLE + Wi-Fi Direct/Hotspot + UDP/RFCOMM)")
         }
 
         return START_STICKY
@@ -185,8 +185,8 @@ class AlertReceiverForegroundService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         Log.i(TAG, "Tearing down AlertReceiverForegroundService")
-        localTransport?.close()
-        localTransport = null
+        multiTierTransport?.close()
+        multiTierTransport = null
         serviceScope.launch {
             ttsEngine?.destroy()
             ttsEngine = null

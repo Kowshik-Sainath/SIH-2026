@@ -17,5 +17,6 @@ data class EmergencyAlert(
     val hopCount: Int = 1,
     val maxHops: Int = 10,
     val isDuplicateBlocked: Boolean = false,
-    val isExpired: Boolean = false
+    val isExpired: Boolean = false,
+    val receivedVia: String = ""
 )

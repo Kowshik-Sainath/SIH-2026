@@ -26,6 +26,8 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.filled.Bluetooth
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,7 +70,8 @@ fun ReceiverMainScreen(
     viewModel: MainViewModel,
     onNavigateToForwarding: (String) -> Unit,
     onNavigateToLanguage: () -> Unit,
-    onNavigateToRoleSelection: () -> Unit = {}
+    onNavigateToRoleSelection: () -> Unit = {},
+    onNavigateToTts: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val alerts by viewModel.alerts.collectAsState()
@@ -160,6 +163,67 @@ fun ReceiverMainScreen(
                             fontSize = 11.sp,
                             color = TextSecondary
                         )
+                    }
+                }
+            }
+
+            // Offline TTS Voice Packs Management Section
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 6.dp),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceWhite),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = NavyPrimary.copy(alpha = 0.12f),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.RecordVoiceOver,
+                                    contentDescription = null,
+                                    tint = NavyPrimary,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                "Offline TTS Voice Packs",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary
+                            )
+                            Text(
+                                "Download Indian voice packs (VITS & Piper)",
+                                fontSize = 11.sp,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onNavigateToTts,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = NavyPrimary)
+                    ) {
+                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Voice Packs", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -280,7 +344,7 @@ fun ReceiverMainScreen(
                                     color = AlertVerified.copy(alpha = 0.15f)
                                 ) {
                                     Text(
-                                        text = "Voice Relay",
+                                        text = if (activeAlert.receivedVia.isNotBlank()) activeAlert.receivedVia else "Voice Relay",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = AlertVerified,
@@ -402,42 +466,86 @@ fun ReceiverMainScreen(
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Transport Info Badges
-                        Row(
+                        // Multi-Tier Transport Info Badges
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = BackgroundLight,
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BackgroundLight,
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(Icons.Default.Wifi, contentDescription = null, tint = AlertVerified, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text("Wi-Fi UDP", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                        Text("Port 28154", fontSize = 10.sp, color = TextSecondary)
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.CellTower, contentDescription = null, tint = Color(0xFFE65100), modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text("BLE Beacon", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                            Text("0x0A99 Zero-Pair", fontSize = 10.sp, color = TextSecondary)
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BackgroundLight,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Radio, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text("Speech Channel", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                            Text("P2P/Hotspot 28155", fontSize = 10.sp, color = TextSecondary)
+                                        }
                                     }
                                 }
                             }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = BackgroundLight,
-                                modifier = Modifier.weight(1f)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BackgroundLight,
+                                    modifier = Modifier.weight(1f)
                                 ) {
-                                    Icon(Icons.Default.Bluetooth, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Column {
-                                        Text("Bluetooth", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                                        Text("Classic RFCOMM", fontSize = 10.sp, color = TextSecondary)
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Wifi, contentDescription = null, tint = AlertVerified, modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text("Wi-Fi UDP", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                            Text("Port 28154", fontSize = 10.sp, color = TextSecondary)
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = BackgroundLight,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Bluetooth, contentDescription = null, tint = Color(0xFF1976D2), modifier = Modifier.size(18.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Column {
+                                            Text("Bluetooth", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                            Text("Classic RFCOMM", fontSize = 10.sp, color = TextSecondary)
+                                        }
                                     }
                                 }
                             }

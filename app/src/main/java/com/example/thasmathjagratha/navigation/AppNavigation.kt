@@ -245,7 +245,8 @@ fun AppNavigation(
                             navController.navigate(NavRoutes.RoleSelection.route) {
                                 popUpTo(0) { inclusive = true }
                             }
-                        }
+                        },
+                        onNavigateToTts = { navController.navigate(NavRoutes.TtsDemo.route) }
                     )
                 }
 

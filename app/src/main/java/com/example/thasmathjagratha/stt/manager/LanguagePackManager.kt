@@ -150,7 +150,13 @@ class LanguagePackManager(private val context: Context) {
             decodingMethod = "greedy_search"
         )
 
-        val recognizer = OfflineRecognizer(config = config)
+        val recognizer = try {
+            OfflineRecognizer(config = config)
+        } catch (t: Throwable) {
+            Log.e("LanguagePackManager", "OfflineRecognizer creation failed for ${pack.displayName}", t)
+            SttTelemetry.addLog("[sherpa-onnx] ERROR initializing [${pack.languageCode}]: ${t.message}")
+            throw IllegalStateException("Failed to initialize offline recognizer for ${pack.displayName}: ${t.message}", t)
+        }
         activeRecognizer = recognizer
         activeLanguageCode = pack.languageCode
 
@@ -161,20 +167,42 @@ class LanguagePackManager(private val context: Context) {
     private fun ensureIndicMetadata(modelFile: File) {
         try {
             if (!modelFile.exists() || modelFile.length() == 0L) return
-            // Check if vocab_size metadata is already present in the ONNX model
-            val bytes = modelFile.readBytes()
+            var bytes = modelFile.readBytes()
+
+            // 1. Check if the corrupt opset 27 header prefix [8, 13, 58, 0, 66, 2, 16, 27] is present
+            val badHeader = byteArrayOf(8, 13, 58, 0, 66, 2, 16, 27)
+            val badIdx = indexOfSubarray(bytes, badHeader)
+            if (badIdx != -1) {
+                Log.w("LanguagePackManager", "Found corrupted Opset 27 patch in ${modelFile.name} at offset $badIdx. Stripping...")
+                bytes = bytes.copyOfRange(0, badIdx)
+                modelFile.writeBytes(bytes)
+            }
+
+            // 2. Check if clean vocab_size metadata is already present in the ONNX model
             val tailString = String(bytes.takeLast(2048).toByteArray(), Charsets.ISO_8859_1)
             if (!tailString.contains("vocab_size")) {
-                val patchBytes = android.util.Base64.decode(
-                    "CA06AEICEBtyEQoKdm9jYWJfc2l6ZRIDMjU3ch0KDm5vcm1hbGl6ZV90eXBlEgtwZXJfZmVhdHVyZXIXChJzdWJzYW1wbGluZ19mYWN0b3ISATRyHwoKbW9kZWxfdHlwZRIRRW5jRGVjQ1RDTW9kZWxCUEVyDAoHdmVyc2lvbhIBMXIUCgxtb2RlbF9hdXRob3ISBG5lbW8=",
+                // Clean NeMo CTC conformer metadata: ONLY metadata_props (tag 14), NO opset/header injection
+                val cleanPatchBytes = android.util.Base64.decode(
+                    "chEKCnZvY2FiX3NpemUSAzI1N3IdCg5ub3JtYWxpemVfdHlwZRILcGVyX2ZlYXR1cmVyFwoSc3Vic2FtcGxpbmdfZmFjdG9yEgE0ch8KCm1vZGVsX3R5cGUSEUVuY0RlY0NUQ01vZGVsQlBFcgwKB3ZlcnNpb24SATFyFAoMbW9kZWxfYXV0aG9yEgRuZW1v",
                     android.util.Base64.DEFAULT
                 )
-                modelFile.appendBytes(patchBytes)
-                Log.i("LanguagePackManager", "Appended NeMo CTC conformer metadata to ${modelFile.name}")
+                modelFile.appendBytes(cleanPatchBytes)
+                Log.i("LanguagePackManager", "Appended clean NeMo CTC conformer metadata to ${modelFile.name}")
             }
         } catch (e: Exception) {
             Log.w("LanguagePackManager", "Could not verify/patch ONNX metadata: ${e.message}")
         }
+    }
+
+    private fun indexOfSubarray(array: ByteArray, target: ByteArray): Int {
+        if (target.isEmpty() || array.size < target.size) return -1
+        outer@ for (i in 0..array.size - target.size) {
+            for (j in target.indices) {
+                if (array[i + j] != target[j]) continue@outer
+            }
+            return i
+        }
+        return -1
     }
 
     @Synchronized

@@ -56,6 +56,7 @@ dependencies {
     implementation("com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v1.13.8")
 
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20231013")
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
 }

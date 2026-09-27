@@ -37,7 +37,7 @@ import com.example.thasmathjagratha.stt.engine.SttListener
 import com.example.thasmathjagratha.stt.manager.LanguagePackManager
 import com.example.thasmathjagratha.stt.telemetry.SttTelemetry
 import com.example.thasmathjagratha.stt.telemetry.TelemetrySnapshot
-import com.example.thasmathjagratha.transport.LocalAlertTransport
+import com.example.thasmathjagratha.transport.MultiTierAlertTransport
 import com.example.thasmathjagratha.transport.WireAlert
 import com.example.thasmathjagratha.tts.engine.TtsEngine
 import com.example.thasmathjagratha.tts.engine.TtsMode
@@ -118,8 +118,8 @@ class MainViewModel @JvmOverloads constructor(
                 receiverTts = null
                 receiverPlayer?.stop()
                 receiverPlayer = null
-                localTransport?.close()
-                localTransport = null
+                multiTierTransport?.close()
+                multiTierTransport = null
             }
             showSnackbar("Configured as Sender: STT Mode (Speak & Send)")
         } else if (role == DeviceRole.RECEIVER) {
@@ -144,8 +144,8 @@ class MainViewModel @JvmOverloads constructor(
             receiverTts = null
             receiverPlayer?.stop()
             receiverPlayer = null
-            localTransport?.close()
-            localTransport = null
+            multiTierTransport?.close()
+            multiTierTransport = null
         }
         roleManager.clearRole()
         _deviceRole.value = DeviceRole.UNSET
@@ -216,7 +216,7 @@ class MainViewModel @JvmOverloads constructor(
     val telemetrySnapshot: StateFlow<TelemetrySnapshot> = _telemetrySnapshot.asStateFlow()
 
     private var sttEngine: SttEngine? = null
-    private var localTransport: LocalAlertTransport? = null
+    private var multiTierTransport: MultiTierAlertTransport? = null
     private var receiverTts: TtsEngine? = null
     private var receiverPlayer: TtsAudioPlayer? = null
     private val announcementMutex = Mutex()
@@ -230,7 +230,7 @@ class MainViewModel @JvmOverloads constructor(
         AlertReceiverForegroundService.start(context)
     }
 
-    fun enableBluetoothAlertReceiver() { localTransport?.startBluetoothIfPermitted() }
+    fun enableBluetoothAlertReceiver() { multiTierTransport?.startBluetoothIfPermitted() }
 
     fun replayReceivedAlert(alert: EmergencyAlert) {
         val code = receiverTts?.packManager?.availablePacks?.firstOrNull {
@@ -276,7 +276,8 @@ class MainViewModel @JvmOverloads constructor(
                 targetArea = "Nearby device",
                 issuedAt = packet.sentAt,
                 expiryTime = now + 60 * 60 * 1000L,
-                verified = false // The local transport does not authenticate authorities.
+                verified = false, // The local transport does not authenticate authorities.
+                receivedVia = packet.transport
             )
             alertRepository.addAlert(alert)
             receiverRepository.addReceivedAlert(ReceivedAlert(
@@ -619,30 +620,28 @@ class MainViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             val code = getLanguageCodeForName(language)
             val app = getApplication<Application>()
-            if (localTransport == null) {
-                localTransport = LocalAlertTransport(app, null)
+            if (multiTierTransport == null) {
+                multiTierTransport = MultiTierAlertTransport(app, null)
             }
-            val transport = localTransport!!
+            val transport = multiTierTransport!!
             val packet = WireAlert(
                 alert.alertId, transport.deviceId, currentUser.value.name,
                 alert.message, code, alert.severity.name, System.currentTimeMillis()
             )
-            _transportDeliveryStatus.value = "Broadcasting alert over Wi-Fi / Bluetooth..."
-            val attempts = runCatching { transport.send(packet) }.getOrElse {
-                Log.e("MainViewModel", "Local broadcast failed", it)
+            _transportDeliveryStatus.value = "Broadcasting alert over BLE Beacon, Speech Channel & UDP..."
+            val success = runCatching { transport.sendAlert(packet) }.getOrElse {
+                Log.e("MainViewModel", "Multi-tier broadcast failed", it)
                 _transportDeliveryStatus.value = "Broadcast error: ${it.message}"
                 showSnackbar("Broadcast failed: ${it.message}")
                 return@launch
             }
             val queued = runCatching { transport.pendingCount() }.getOrDefault(0)
-            if (attempts > 0) {
-                _transportDeliveryStatus.value = "Sent via local broadcast ($attempts link(s))"
-                showSnackbar("Alert sent on local links ($attempts sends; queued: $queued)")
-            } else if (queued > 0) {
-                _transportDeliveryStatus.value = "Queued in outbox (searching for receiver...)"
-                showSnackbar("No nearby device yet; alert queued and will retry automatically")
+            if (success) {
+                _transportDeliveryStatus.value = "Delivered via Multi-Tier Transport"
+                showSnackbar("Alert broadcasted across Multi-Tier Transport (Outbox pending: $queued)")
             } else {
-                _transportDeliveryStatus.value = "Sent"
+                _transportDeliveryStatus.value = "Queued in Durable Outbox (auto-retrying)"
+                showSnackbar("No nearby receiver connected yet; saved to durable outbox")
             }
         }
     }
@@ -650,7 +649,7 @@ class MainViewModel @JvmOverloads constructor(
     override fun onCleared() {
         announcementJobs.values.forEach { it.cancel() }
         receiverPlayer?.acknowledgeAlert()
-        localTransport?.close()
+        multiTierTransport?.close()
         CoroutineScope(Dispatchers.Default).launch { receiverTts?.destroy() }
         super.onCleared()
     }
@@ -787,10 +786,10 @@ class MainViewModel @JvmOverloads constructor(
                 )
                 engine.startListening()
                 refreshTelemetry()
-            } catch (e: Exception) {
-                e.printStackTrace()
+            } catch (e: Throwable) {
+                Log.e("MainViewModel", "STT Error during listening startup", e)
                 _speechState.value = _speechState.value.copy(isListening = false)
-                showSnackbar("STT Error: ${e.message}")
+                showSnackbar("STT Error: ${e.message ?: "Failed to start speech recognition"}")
             }
         }
     }

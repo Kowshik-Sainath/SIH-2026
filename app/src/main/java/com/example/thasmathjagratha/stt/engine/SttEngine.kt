@@ -78,10 +78,14 @@ class SttEngine(
             try {
                 activeRecognizer = packManager.loadLanguage(pack)
                 SttTelemetry.addLog("[SttEngine] Preloaded offline recognizer for [$languageCode]")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load recognizer for $languageCode", e)
-                SttTelemetry.addLog("[SttEngine] Error loading [$languageCode]: ${e.message}")
+            } catch (t: Throwable) {
+                Log.e(TAG, "Failed to load recognizer for $languageCode", t)
+                SttTelemetry.addLog("[SttEngine] Error loading [$languageCode]: ${t.message}")
+                activeRecognizer = null
+                throw t
             }
+        } else {
+            throw IllegalStateException("Language pack [$languageCode] is not downloaded or incomplete.")
         }
     }
 
@@ -90,6 +94,10 @@ class SttEngine(
      */
     fun startListening() {
         if (isListening) return
+        if (activeRecognizer == null) {
+            listener?.onError(IllegalStateException("Speech recognizer is not initialized. Please ensure the language pack is downloaded."))
+            return
+        }
         isListening = true
 
         synchronized(bufferLock) {

@@ -115,6 +115,13 @@ fun SpeakScreen(
     val packManager = remember { LanguagePackManager(context) }
     val availablePacks = packManager.availablePacks
 
+    val currentPack = remember(speechState.selectedLanguage, availablePacks) {
+        availablePacks.firstOrNull { it.displayName == speechState.selectedLanguage }
+    }
+    val isCurrentPackDownloaded = remember(speechState.selectedLanguage, downloadProgress) {
+        currentPack?.let { packManager.isPackDownloaded(it.languageCode) } ?: false
+    }
+
     val languages = availablePacks.map { it.displayName }
     val receivers = listOf("Control Room", "Rescue Team 1", "Nearby Officers", "Public Broadcast")
 
@@ -256,17 +263,33 @@ fun SpeakScreen(
                                 color = if (speechState.isListening) AlertCritical else AlertVerified
                             )
                         }
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = NavyPrimary.copy(alpha = 0.15f)
-                        ) {
-                            Text(
-                                text = "Lang: ${speechState.selectedLanguage}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = NavyPrimary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = NavyPrimary.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "Lang: ${speechState.selectedLanguage}",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = NavyPrimary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = NavyPrimary.copy(alpha = 0.12f),
+                                modifier = Modifier.clickable { onNavigateToTts() }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(Icons.Default.VolumeUp, contentDescription = null, tint = NavyPrimary, modifier = Modifier.size(12.dp))
+                                    Spacer(modifier = Modifier.width(3.dp))
+                                    Text("TTS Voices", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NavyPrimary)
+                                }
+                            }
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -301,11 +324,22 @@ fun SpeakScreen(
 
                 Surface(
                     shape = CircleShape,
-                    color = if (speechState.isListening) AlertCritical else NavyPrimary,
-                    shadowElevation = 10.dp,
+                    color = when {
+                        speechState.isListening -> AlertCritical
+                        !isCurrentPackDownloaded -> Color(0xFF78909C)
+                        else -> NavyPrimary
+                    },
+                    shadowElevation = if (isCurrentPackDownloaded) 10.dp else 4.dp,
                     modifier = Modifier
                         .size(110.dp)
                         .clickable {
+                            if (!isCurrentPackDownloaded) {
+                                currentPack?.let { pack ->
+                                    viewModel.showSnackbar("Downloading ${pack.displayName} STT model pack...")
+                                    viewModel.downloadLanguagePack(context, pack.displayName)
+                                } ?: viewModel.showSnackbar("Please download the STT language pack below.")
+                                return@clickable
+                            }
                             if (speechState.isListening) {
                                 viewModel.stopRealListening()
                             } else {
@@ -324,8 +358,8 @@ fun SpeakScreen(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Push to Talk",
+                            imageVector = if (isCurrentPackDownloaded) Icons.Default.Mic else Icons.Default.Download,
+                            contentDescription = if (isCurrentPackDownloaded) "Push to Talk" else "Download Pack",
                             tint = SurfaceWhite,
                             modifier = Modifier.size(52.dp)
                         )
@@ -336,13 +370,25 @@ fun SpeakScreen(
             Spacer(modifier = Modifier.height(12.dp))
 
             Text(
-                text = if (speechState.isListening) "Listening & Streaming STT..." else "Tap Microphone for Push-To-Talk",
+                text = when {
+                    speechState.isListening -> "Listening & Streaming STT..."
+                    !isCurrentPackDownloaded -> "STT Pack Not Downloaded (Tap to Download)"
+                    else -> "Tap Microphone for Push-To-Talk"
+                },
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
-                color = if (speechState.isListening) AlertCritical else TextPrimary
+                color = when {
+                    speechState.isListening -> AlertCritical
+                    !isCurrentPackDownloaded -> Color(0xFFD32F2F)
+                    else -> TextPrimary
+                }
             )
             Text(
-                text = "INT8 ONNX Runtime (Indic) + sherpa-onnx NeMo Conformer (English)",
+                text = if (!isCurrentPackDownloaded) {
+                    "${speechState.selectedLanguage} model (${currentPack?.modelSizeMb ?: "~45 MB"}) must be downloaded before speaking"
+                } else {
+                    "INT8 ONNX Runtime (Indic) + sherpa-onnx NeMo Conformer (English)"
+                },
                 fontSize = 11.sp,
                 color = TextSecondary
             )
